@@ -189,9 +189,16 @@ def enforce_port_update():
             for db_obj in query.all()
         ]
     if len(pairs) > 0:
-        msg = f"Address pairs dependency found for port: {g.target['id']}"
-        LOG.info(msg)
-        return Response(msg, status=403, mimetype="text/plain")
+        network_id = ports[0].network_id
+        for pair in pairs:
+            port = port_obj.Port.get_object(g.ctx, id=pair.port_id)
+            if port and port.network_id == network_id:
+                msg = (
+                    "Address pairs dependency found for port: "
+                    f"{g.target['id']}"
+                )
+                LOG.info(msg)
+                return Response(msg, status=403, mimetype="text/plain")
     LOG.info(f"Update check passed for port: {g.target['id']}")
     return Response("True", status=200, mimetype="text/plain")
 
@@ -201,6 +208,7 @@ def enforce_port_delete():
     # Check only IP address if strict is 0
     strict = bool(request.args.get("strict", default=1, type=int))
     fixed_ips = [str(fixed_ip["ip_address"]) for fixed_ip in g.target["fixed_ips"]]
+    network_id = g.target["network_id"]
     with db_api.CONTEXT_READER.using(g.ctx):
         query = g.ctx.session.query(models.AllowedAddressPair).filter(
             models.AllowedAddressPair.ip_address.in_(fixed_ips)
@@ -217,9 +225,15 @@ def enforce_port_delete():
         for db_obj in query.all()
     ]
     if len(pairs) > 0:
-        msg = f"Address pairs dependency found for port: {g.target['id']}"
-        LOG.info(msg)
-        return Response(msg, status=403, mimetype="text/plain")
+        for pair in pairs:
+            port = port_obj.Port.get_object(g.ctx, id=pair.port_id)
+            if port and port.network_id == network_id:
+                msg = (
+                    "Address pairs dependency found for port: "
+                    f"{g.target['id']}"
+                )
+                LOG.info(msg)
+                return Response(msg, status=403, mimetype="text/plain")
 
     LOG.info(f"Delete check passed for port: {g.target['id']}")
     return Response("True", status=200, mimetype="text/plain")
