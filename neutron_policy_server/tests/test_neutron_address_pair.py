@@ -57,6 +57,19 @@ class TestAddressPairCasesFlaskBase(
             )
             self.port_dep = self.deserialize(self.fmt, self.port_resp_dep)
 
+        with self.network() as net2:
+            with self.subnet(network=net2, cidr="10.0.0.0/24") as subnet2:
+                fixed_ips2 = [
+                    {"subnet_id": subnet2["subnet"]["id"], "ip_address": "10.0.0.2"}
+                ]
+            self.port_diff_net2_resp = self._create_port(
+                self.fmt,
+                net2["network"]["id"],
+                mac_address="00:00:00:00:00:02",
+                fixed_ips=fixed_ips2,
+            )
+            self.port_diff_net2 = self.deserialize(self.fmt, self.port_diff_net2_resp)
+
         # delete
         self.delete_port_json = {
             "rule": "delete_port",
@@ -64,6 +77,14 @@ class TestAddressPairCasesFlaskBase(
             "credentials": {
                 "user_id": "fake_user",
                 "project_id": self.port["port"]["project_id"],
+            },
+        }
+        self.delete_port_strict_diff_net = {
+            "rule": "delete_port",
+            "target": self.port_diff_net2["port"],
+            "credentials": {
+                "user_id": "fake_user",
+                "project_id": self.port_diff_net2["port"]["project_id"],
             },
         }
         self.delete_port_strict = {
@@ -152,6 +173,23 @@ class TestAddressPairCasesFlaskBase(
         ]
         self.update_port_strict["target"]["mac_address"] = "00:00:00:00:20:01"
 
+        self.update_port_strict_diff_net = {
+            "rule": "update_port",
+            "target": self.port_diff_net2["port"].copy(),
+            "credentials": {
+                "user_id": "fake_user",
+                "project_id": self.port_diff_net2["port"]["project_id"],
+            },
+        }
+        self.update_port_strict_diff_net["target"]["attributes_to_update"] = [
+            "fixed_ips",
+            "mac_address",
+        ]
+        self.update_port_strict_diff_net["target"]["fixed_ips"] = [
+            {"subnet_id": subnet2["subnet"]["id"], "ip_address": "10.0.0.2"}
+        ]
+        self.update_port_strict_diff_net["target"]["mac_address"] = "00:00:00:00:20:01"
+
         self.allowed_address_pairs = {
             "rule": "allowed_address_pairs",
             "target": self.port_dep["port"].copy(),
@@ -219,6 +257,20 @@ class TestAddressPairCasesFlask(TestAddressPairCasesFlaskBase):
     def test_port_delete_success(self):
         response = self.client.post(  # pylint: disable=E1101
             "/port-delete?strict=0", json=self.delete_port_dep_json
+        )  # pylint: disable=E1101
+        self.assertEqual(b"True", response.data)
+        self.assertEqual(200, response.status_code)
+
+    def test_port_delete_success_strict_diff_net(self):
+        response = self.client.post(  # pylint: disable=E1101
+            "/port-delete?strict=1", json=self.delete_port_strict_diff_net
+        )  # pylint: disable=E1101
+        self.assertEqual(b"True", response.data)
+        self.assertEqual(200, response.status_code)
+
+    def test_port_delete_success_diff_net(self):
+        response = self.client.post(  # pylint: disable=E1101
+            "/port-delete?strict=0", json=self.delete_port_strict_diff_net
         )  # pylint: disable=E1101
         self.assertEqual(b"True", response.data)
         self.assertEqual(200, response.status_code)
@@ -296,6 +348,24 @@ class TestAddressPairCasesFlask(TestAddressPairCasesFlaskBase):
         response = self.client.post(  # pylint: disable=E1101
             "port-update?strict=0", json=self.update_port_not_exist
         )  # pylint: disable=E1101
+        self.assertEqual(b"True", response.data)
+        self.assertEqual(200, response.status_code)
+
+    def test_port_update_success_strict_with_diff_net(self):
+        """Failed if IP address dep found"""
+
+        response = self.client.post(  # pylint: disable=E1101
+            "port-update?strict=1", json=self.update_port_strict_diff_net
+        )
+        self.assertEqual(b"True", response.data)
+        self.assertEqual(200, response.status_code)
+
+    def test_port_update_success_with_diff_net(self):
+        """Failed if IP address dep found"""
+
+        response = self.client.post(  # pylint: disable=E1101
+            "port-update?strict=0", json=self.update_port_strict_diff_net
+        )
         self.assertEqual(b"True", response.data)
         self.assertEqual(200, response.status_code)
 

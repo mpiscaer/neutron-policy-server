@@ -155,7 +155,6 @@ def enforce_port_update():
     elif (not strict or ("mac_address" not in g.target["attributes_to_update"])) and (
         "fixed_ips" not in g.target["attributes_to_update"]
     ):
-        msg = ""
         LOG.info(
             f"No {'mac_address or fixed_ips' if strict else 'fixed_ips'} in "
             f"update targets for port {g.target['id']}, skip check."
@@ -174,54 +173,56 @@ def enforce_port_update():
                 "context, skip this check."
             )
             return Response("True", status=200, mimetype="text/plain")
-
-        fixed_ips = [str(fixed_ip["ip_address"]) for fixed_ip in ports[0].fixed_ips]
-
-        query = g.ctx.session.query(models.AllowedAddressPair).filter(
-            models.AllowedAddressPair.ip_address.in_(fixed_ips)
-        )
-        if strict:
-            query = query.filter(
-                models.AllowedAddressPair.mac_address.in_([str(ports[0].mac_address)])
-            )
-        pairs = [
-            aap_obj.AllowedAddressPair._load_object(context, db_obj)
-            for db_obj in query.all()
-        ]
-    if len(pairs) > 0:
-        msg = f"Address pairs dependency found for port: {g.target['id']}"
-        LOG.info(msg)
-        return Response(msg, status=403, mimetype="text/plain")
-    LOG.info(f"Update check passed for port: {g.target['id']}")
-    return Response("True", status=200, mimetype="text/plain")
+    return _check_address_pair_match(
+        g.ctx,
+        str(ports[0].network_id),
+        ports[0].fixed_ips,
+        mac_address=str(ports[0].mac_address) if strict else None,
+        success_msg=f"Update check passed for port: {g.target['id']}",
+    )
 
 
 @app.route("/port-delete", methods=["POST"])
 def enforce_port_delete():
     # Check only IP address if strict is 0
     strict = bool(request.args.get("strict", default=1, type=int))
-    fixed_ips = [str(fixed_ip["ip_address"]) for fixed_ip in g.target["fixed_ips"]]
-    with db_api.CONTEXT_READER.using(g.ctx):
-        query = g.ctx.session.query(models.AllowedAddressPair).filter(
+    return _check_address_pair_match(
+        g.ctx,
+        str(g.target["network_id"]),
+        g.target["fixed_ips"],
+        mac_address=str(g.target["mac_address"]) if strict else None,
+        success_msg=f"Delete check passed for port: {g.target['id']}",
+    )
+
+
+def _check_address_pair_match(
+    ctx, network_id, fixed_ips, mac_address=None, success_msg=""
+):
+    fixed_ips = [str(fixed_ip["ip_address"]) for fixed_ip in fixed_ips]
+    with db_api.CONTEXT_READER.using(ctx):
+        query = ctx.session.query(models.AllowedAddressPair).filter(
             models.AllowedAddressPair.ip_address.in_(fixed_ips)
         )
-        if strict:
+        if mac_address:
             query = query.filter(
-                models.AllowedAddressPair.mac_address.in_(
-                    [str(g.target["mac_address"])]
-                )
+                models.AllowedAddressPair.mac_address.in_([mac_address])
             )
 
-    pairs = [
-        aap_obj.AllowedAddressPair._load_object(context, db_obj)
-        for db_obj in query.all()
-    ]
-    if len(pairs) > 0:
-        msg = f"Address pairs dependency found for port: {g.target['id']}"
-        LOG.info(msg)
-        return Response(msg, status=403, mimetype="text/plain")
+        pairs = [
+            aap_obj.AllowedAddressPair._load_object(ctx, db_obj)
+            for db_obj in query.all()
+        ]
+        if len(pairs) > 0:
+            for pair in pairs:
+                port = port_obj.Port.get_object(ctx, id=pair.port_id)
+                if port and port.network_id == network_id:
+                    msg = (
+                        "Address pairs dependency found for port: " f"{g.target['id']}"
+                    )
+                    LOG.info(msg)
+                    return Response(msg, status=403, mimetype="text/plain")
 
-    LOG.info(f"Delete check passed for port: {g.target['id']}")
+    LOG.info(success_msg)
     return Response("True", status=200, mimetype="text/plain")
 
 
