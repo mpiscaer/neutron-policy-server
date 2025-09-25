@@ -360,7 +360,6 @@ class TestAddressPairCasesFlask(TestAddressPairCasesFlaskBase):
         self.assertEqual(b"True", response.data)
         self.assertEqual(200, response.status_code)
 
-
     def test_port_update_success_with_diff_net(self):
         """Failed if IP address dep found"""
 

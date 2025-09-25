@@ -175,9 +175,11 @@ def enforce_port_update():
             )
             return Response("True", status=200, mimetype="text/plain")
     return _check_address_pair_match(
-        g.ctx, str(ports[0].network_id), ports[0].fixed_ips,
+        g.ctx,
+        str(ports[0].network_id),
+        ports[0].fixed_ips,
         mac_address=str(ports[0].mac_address) if strict else None,
-        success_msg=f"Update check passed for port: {g.target['id']}"
+        success_msg=f"Update check passed for port: {g.target['id']}",
     )
 
 
@@ -186,16 +188,18 @@ def enforce_port_delete():
     # Check only IP address if strict is 0
     strict = bool(request.args.get("strict", default=1, type=int))
     return _check_address_pair_match(
-        g.ctx, str(g.target["network_id"]), g.target["fixed_ips"],
+        g.ctx,
+        str(g.target["network_id"]),
+        g.target["fixed_ips"],
         mac_address=str(g.target["mac_address"]) if strict else None,
-        success_msg=f"Delete check passed for port: {g.target['id']}"
+        success_msg=f"Delete check passed for port: {g.target['id']}",
     )
 
-def _check_address_pair_match(ctx, network_id, fixed_ips,
-                              mac_address=None, success_msg=''):
-    fixed_ips = [
-        str(fixed_ip["ip_address"]) for fixed_ip in fixed_ips
-    ]
+
+def _check_address_pair_match(
+    ctx, network_id, fixed_ips, mac_address=None, success_msg=""
+):
+    fixed_ips = [str(fixed_ip["ip_address"]) for fixed_ip in fixed_ips]
     with db_api.CONTEXT_READER.using(ctx):
         query = ctx.session.query(models.AllowedAddressPair).filter(
             models.AllowedAddressPair.ip_address.in_(fixed_ips)
@@ -214,8 +218,7 @@ def _check_address_pair_match(ctx, network_id, fixed_ips,
                 port = port_obj.Port.get_object(ctx, id=pair.port_id)
                 if port and port.network_id == network_id:
                     msg = (
-                        "Address pairs dependency found for port: "
-                        f"{g.target['id']}"
+                        "Address pairs dependency found for port: " f"{g.target['id']}"
                     )
                     LOG.info(msg)
                     return Response(msg, status=403, mimetype="text/plain")
@@ -227,8 +230,7 @@ def _check_address_pair_match(ctx, network_id, fixed_ips,
 @app.route("/health", methods=["GET"])
 def health_check():
     with db_api.CONTEXT_READER.using(g.ctx):
-        port_obj.Port.get_objects(g.ctx,
-                                  id=["neutron_policy_server_health_check"])
+        port_obj.Port.get_objects(g.ctx, id=["neutron_policy_server_health_check"])
         return Response(status=200)
 
 
