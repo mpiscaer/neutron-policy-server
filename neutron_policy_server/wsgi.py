@@ -155,7 +155,6 @@ def enforce_port_update():
     elif (not strict or ("mac_address" not in g.target["attributes_to_update"])) and (
         "fixed_ips" not in g.target["attributes_to_update"]
     ):
-        msg = ""
         LOG.info(
             f"No {'mac_address or fixed_ips' if strict else 'fixed_ips'} in "
             f"update targets for port {g.target['id']}, skip check."
